@@ -7,3 +7,6 @@ dist
 *.sqlite-shm
 *.sqlite-wal
 
+
+.gemini/
+gha-creds-*.json

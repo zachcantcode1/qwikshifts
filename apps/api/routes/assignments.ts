@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import db from '../db';
+import { assignments, shifts } from '../schema';
+import { eq, and } from 'drizzle-orm';
 import type { ShiftAssignment, User } from '@qwikshifts/core';
 import { z } from 'zod';
 import { validator } from 'hono/validator';
@@ -32,38 +34,51 @@ app.post('/assign', validator('json', (value, c) => {
   const { shiftId, employeeId, roleId } = c.req.valid('json');
 
   // Check if shift exists and belongs to user's org
-  const shift = db.query("SELECT * FROM shifts WHERE id = ? AND org_id = ?").get(shiftId, user.orgId) as any;
+  const shift = await db.query.shifts.findFirst({
+    where: and(eq(shifts.id, shiftId), eq(shifts.orgId, user.orgId)),
+  });
+
   if (!shift) {
     return c.json({ error: 'Shift not found' }, 404);
   }
 
   // Check for existing assignment
-  const existing = db.query("SELECT * FROM assignments WHERE shift_id = ?").get(shiftId) as any;
+  const existing = await db.query.assignments.findFirst({
+    where: eq(assignments.shiftId, shiftId),
+  });
 
   let assignment: ShiftAssignment;
 
   if (existing) {
     // Update existing assignment
-    db.query("UPDATE assignments SET employee_id = ?, role_id = ? WHERE id = ?").run(
-      employeeId, roleId || null, existing.id
-    );
+    const [updated] = await db.update(assignments)
+      .set({ employeeId, roleId: roleId || null })
+      .where(eq(assignments.id, existing.id))
+      .returning();
+    
     assignment = {
-      id: existing.id,
-      shiftId,
-      employeeId,
-      roleId,
+      id: updated.id,
+      shiftId: updated.shiftId,
+      employeeId: updated.employeeId,
+      roleId: updated.roleId || undefined,
     };
   } else {
     // Create new assignment
     const newId = `assign-${Date.now()}`;
-    db.query("INSERT INTO assignments (id, shift_id, employee_id, role_id) VALUES (?, ?, ?, ?)").run(
-      newId, shiftId, employeeId, roleId || null
-    );
+    const [created] = await db.insert(assignments)
+      .values({
+        id: newId,
+        shiftId,
+        employeeId,
+        roleId: roleId || null,
+      })
+      .returning();
+      
     assignment = {
-      id: newId,
-      shiftId,
-      employeeId,
-      roleId,
+      id: created.id,
+      shiftId: created.shiftId,
+      employeeId: created.employeeId,
+      roleId: created.roleId || undefined,
     };
   }
 
@@ -75,17 +90,20 @@ app.post('/unassign', validator('json', (value, c) => {
   const parsed = schema.safeParse(value);
   if (!parsed.success) return c.json(parsed.error, 400);
   return parsed.data;
-}), (c) => {
+}), async (c) => {
   const user = c.get('user');
   const { shiftId } = c.req.valid('json');
 
   // Verify shift belongs to user's org before deleting assignment
-  const shift = db.query("SELECT * FROM shifts WHERE id = ? AND org_id = ?").get(shiftId, user.orgId) as any;
+  const shift = await db.query.shifts.findFirst({
+    where: and(eq(shifts.id, shiftId), eq(shifts.orgId, user.orgId)),
+  });
+  
   if (!shift) {
     return c.json({ error: 'Shift not found' }, 404);
   }
 
-  db.query("DELETE FROM assignments WHERE shift_id = ?").run(shiftId);
+  await db.delete(assignments).where(eq(assignments.shiftId, shiftId));
 
   return c.json({ success: true });
 });

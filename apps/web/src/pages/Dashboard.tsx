@@ -1,36 +1,24 @@
-import { useEffect, useState } from 'react';
-import { api, type DashboardStats } from '@/lib/api';
+import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar, Clock, AlertTriangle, CheckCircle, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
+import { useQuery } from '@tanstack/react-query';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  
+  const { data: stats, isLoading, isError } = useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: api.getDashboardStats,
+  });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const data = await api.getDashboardStats();
-        setStats(data);
-      } catch (error) {
-        console.error('Failed to fetch dashboard stats', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return <div className="p-8">Loading dashboard...</div>;
   }
 
-  if (!stats) {
+  if (isError || !stats) {
     return <div className="p-8">Failed to load dashboard data.</div>;
   }
 
@@ -108,21 +96,40 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        {/* Requirements Status (Placeholder) */}
+        {/* Requirements Status */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Requirements
+              Weekly Coverage
             </CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">100%</div>
-            <p className="text-xs text-muted-foreground">
-              Coverage met for today
-            </p>
+            <div className="space-y-2 mt-2">
+              {stats.weeklyRequirements?.map((day) => (
+                <div key={day.date} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground w-10">{day.dayName}</span>
+                  <div className="flex items-center gap-2">
+                    {day.status === 'ok' ? (
+                      <span className="text-green-500 text-xs font-medium flex items-center">
+                        <CheckCircle className="h-3 w-3 mr-1" /> OK
+                      </span>
+                    ) : (
+                      <span className="text-amber-500 text-xs font-medium flex items-center">
+                        <AlertTriangle className="h-3 w-3 mr-1" /> -{day.missing}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {(!stats.weeklyRequirements || stats.weeklyRequirements.length === 0) && (
+                <p className="text-xs text-muted-foreground">No requirements set.</p>
+              )}
+            </div>
              <div className="mt-4">
-               <Button variant="ghost" size="sm" className="w-full" disabled>View Details</Button>
+               <Link to="/schedule">
+                 <Button variant="ghost" size="sm" className="w-full">View Schedule</Button>
+               </Link>
             </div>
           </CardContent>
         </Card>

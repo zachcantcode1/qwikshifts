@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import db from '../db';
+import { timeOffRequests, employees, users, rules, shifts, assignments, requirements } from '../schema';
+import { eq, and, count, gte, lte } from 'drizzle-orm';
 import type { User } from '@qwikshifts/core';
-import { startOfWeek, endOfWeek, parseISO, differenceInHours, format } from 'date-fns';
+import { startOfWeek, endOfWeek, parseISO, differenceInHours, format, addDays } from 'date-fns';
 
 type Env = {
   Variables: {
@@ -11,11 +13,17 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/stats', (c) => {
+app.get('/stats', async (c) => {
   const user = c.get('user');
 
   // 1. Pending Time Off Requests
-  const pendingRequests = db.query("SELECT COUNT(*) as count FROM time_off_requests WHERE status = 'pending' AND org_id = ?").get(user.orgId) as any;
+  const [pendingRequests] = await db.select({ count: count() })
+    .from(timeOffRequests)
+    .where(and(
+      eq(timeOffRequests.status, 'pending'),
+      eq(timeOffRequests.orgId, user.orgId)
+    ));
+  
   const pendingTimeOffCount = pendingRequests?.count || 0;
 
   // 2. Overtime Risk
@@ -27,28 +35,45 @@ app.get('/stats', (c) => {
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
   // Get all employees with their hour limits
-  const employees = db.query(`
-    SELECT e.*, u.name as user_name, r.value as rule_value
-    FROM employees e
-    JOIN users u ON e.user_id = u.id
-    LEFT JOIN rules r ON e.rule_id = r.id
-    WHERE e.org_id = ?
-  `).all(user.orgId) as any[];
+  const allEmployees = await db.select({
+    id: employees.id,
+    weeklyHoursLimit: employees.weeklyHoursLimit,
+    ruleValue: rules.value,
+    userName: users.name,
+  })
+    .from(employees)
+    .innerJoin(users, eq(employees.userId, users.id))
+    .leftJoin(rules, eq(employees.ruleId, rules.id))
+    .where(eq(employees.orgId, user.orgId));
 
-  const overtimeRisks = employees.map(employee => {
-    // Get all shifts assigned to this employee in the current week
-    const assignments = db.query(`
-      SELECT s.* FROM shifts s
-      JOIN assignments a ON s.id = a.shift_id
-      WHERE a.employee_id = ? AND s.date >= ? AND s.date <= ?
-    `).all(employee.id, weekStartStr, weekEndStr) as any[];
+  const overtimeRisks = [];
+
+  // Get all shifts assigned in the current week
+  const weekShifts = await db.select({
+      date: shifts.date,
+      startTime: shifts.startTime,
+      endTime: shifts.endTime,
+      areaId: shifts.areaId,
+      employeeId: assignments.employeeId,
+      roleId: assignments.roleId,
+    })
+    .from(shifts)
+    .innerJoin(assignments, eq(shifts.id, assignments.shiftId))
+    .where(and(
+      eq(shifts.orgId, user.orgId),
+      gte(shifts.date, weekStartStr),
+      lte(shifts.date, weekEndStr)
+    ));
+
+  for (const employee of allEmployees) {
+    const employeeAssignments = weekShifts.filter(s => s.employeeId === employee.id);
 
     let totalHours = 0;
 
-    assignments.forEach((shift: any) => {
+    employeeAssignments.forEach((shift) => {
       try {
-        const start = parseISO(`${shift.date}T${shift.start_time}`);
-        const end = parseISO(`${shift.date}T${shift.end_time}`);
+        const start = parseISO(`${shift.date}T${shift.startTime}`);
+        const end = parseISO(`${shift.date}T${shift.endTime}`);
         const hours = differenceInHours(end, start);
         totalHours += hours;
       } catch (e) {
@@ -56,33 +81,89 @@ app.get('/stats', (c) => {
       }
     });
 
-    const limit = employee.weekly_hours_limit || employee.rule_value || 40;
+    const limit = employee.weeklyHoursLimit || employee.ruleValue || 40;
     const threshold = limit * 0.9; // 90% of limit
 
     if (totalHours >= threshold) {
-      return {
+      overtimeRisks.push({
         employeeId: employee.id,
-        name: employee.user_name || 'Unknown',
+        name: employee.userName || 'Unknown',
         currentHours: totalHours,
         limit: limit
-      };
+      });
     }
-    return null;
-  }).filter(Boolean);
+  }
 
   // 3. Today's Shifts Stats
   const todayStr = format(now, 'yyyy-MM-dd');
 
-  const todaysShifts = db.query("SELECT * FROM shifts WHERE org_id = ? AND date = ?").all(user.orgId, todayStr) as any[];
+  const todaysShifts = await db.select()
+    .from(shifts)
+    .where(and(
+      eq(shifts.orgId, user.orgId),
+      eq(shifts.date, todayStr)
+    ));
+    
   const totalShiftsToday = todaysShifts.length;
 
-  // Count unassigned shifts
   let unassignedShiftsToday = 0;
-  for (const shift of todaysShifts) {
-    const assignment = db.query("SELECT * FROM assignments WHERE shift_id = ?").get(shift.id);
-    if (!assignment) {
-      unassignedShiftsToday++;
+  
+  if (totalShiftsToday > 0) {
+    const todaysShiftsWithAssignments = await db.select({
+      id: shifts.id,
+      assignmentId: assignments.id,
+    })
+    .from(shifts)
+    .leftJoin(assignments, eq(shifts.id, assignments.shiftId))
+    .where(and(
+      eq(shifts.orgId, user.orgId),
+      eq(shifts.date, todayStr)
+    ));
+
+    unassignedShiftsToday = todaysShiftsWithAssignments.filter(s => !s.assignmentId).length;
+  }
+
+  // 4. Weekly Requirements Coverage
+  const allRequirements = await db.query.requirements.findMany({
+    where: eq(requirements.orgId, user.orgId),
+  });
+
+  const weeklyRequirements = [];
+  
+  for (let i = 0; i < 7; i++) {
+    const currentDay = addDays(weekStart, i);
+    const dateStr = format(currentDay, 'yyyy-MM-dd');
+    const dayName = format(currentDay, 'eeee').toLowerCase(); // 'monday', 'tuesday', etc.
+
+    const dayRequirements = allRequirements.filter(r => r.dayOfWeek === dayName);
+    
+    let totalRequired = 0;
+    let missing = 0;
+
+    for (const req of dayRequirements) {
+      totalRequired += req.count;
+      
+      // Count shifts matching area and role on this day
+      // Note: assignment roleId is optional, but requirements are for a specific role.
+      // We check if the assignment has the specific role.
+      const coveredCount = weekShifts.filter(s => 
+        s.date === dateStr && 
+        s.areaId === req.areaId && 
+        s.roleId === req.roleId
+      ).length;
+
+      if (coveredCount < req.count) {
+        missing += (req.count - coveredCount);
+      }
     }
+
+    weeklyRequirements.push({
+      date: dateStr,
+      dayName: format(currentDay, 'EEE'), // 'Mon', 'Tue' for display
+      status: missing === 0 ? 'ok' : 'warning',
+      missing,
+      totalRequired,
+    });
   }
 
   return c.json({
@@ -91,7 +172,8 @@ app.get('/stats', (c) => {
     todaysStats: {
       totalShifts: totalShiftsToday,
       unassignedShifts: unassignedShiftsToday
-    }
+    },
+    weeklyRequirements,
   });
 });
 

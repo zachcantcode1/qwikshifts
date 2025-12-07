@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from '@/components/Layout';
 import Dashboard from '@/pages/Dashboard';
 import { ScheduleBoard } from '@/pages/ScheduleBoard';
@@ -9,10 +10,14 @@ import { Employees } from '@/pages/Employees';
 import { Settings } from '@/pages/Settings';
 import Onboarding from '@/pages/Onboarding';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { useState } from 'react';
 import './App.css';
 
+const queryClient = new QueryClient();
+
 function AppContent() {
-  const { user, isLoading, isOnboarded } = useAuth();
+  const { user, isLoading, isOnboarded, login } = useAuth();
+  const [email, setEmail] = useState('');
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen bg-background text-foreground">Loading...</div>;
@@ -26,19 +31,22 @@ function AppContent() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4 bg-background text-foreground">
         <h1 className="text-2xl font-bold">QwikShifts</h1>
-        <p className="text-muted-foreground">Session expired or not logged in.</p>
-        <button
-          onClick={() => {
-            const id = prompt("Enter User ID");
-            if (id) {
-              localStorage.setItem('qwikshifts-user-id', id);
-              window.location.reload();
-            }
-          }}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-        >
-          Login
-        </button>
+        <p className="text-muted-foreground">Please log in to continue.</p>
+        <div className="flex flex-col gap-2 w-full max-w-sm px-4">
+          <input
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="px-4 py-2 border rounded-md"
+          />
+          <button
+            onClick={() => login(email)}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Login
+          </button>
+        </div>
       </div>
     );
   }
@@ -60,11 +68,13 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import db from '../db';
-import type { Area, User } from '@qwikshifts/core';
+import { areas } from '../schema';
+import { eq, and } from 'drizzle-orm';
+import type { User } from '@qwikshifts/core';
 
 type Env = {
   Variables: {
@@ -10,27 +12,20 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const user = c.get('user');
   const locationId = c.req.query('locationId');
   
-  let query = "SELECT * FROM areas WHERE org_id = ?";
-  const params = [user.orgId];
-
+  const filters = [eq(areas.orgId, user.orgId)];
   if (locationId) {
-    query += " AND location_id = ?";
-    params.push(locationId);
+    filters.push(eq(areas.locationId, locationId));
   }
 
-  const areas = db.query(query).all(...params) as any[];
+  const result = await db.query.areas.findMany({
+    where: and(...filters),
+  });
   
-  return c.json(areas.map(a => ({
-    id: a.id,
-    name: a.name,
-    color: a.color,
-    orgId: a.org_id,
-    locationId: a.location_id
-  })));
+  return c.json(result);
 });
 
 app.post('/', async (c) => {
@@ -42,17 +37,13 @@ app.post('/', async (c) => {
     return c.json({ error: 'Location ID is required' }, 400);
   }
 
-  const newArea: Area = {
+  const [newArea] = await db.insert(areas).values({
     id: `area-${Date.now()}`,
     name,
     color: color || '#3b82f6',
     orgId: user.orgId,
     locationId,
-  };
-
-  db.query("INSERT INTO areas (id, name, color, org_id, location_id) VALUES (?, ?, ?, ?, ?)").run(
-    newArea.id, newArea.name, newArea.color, newArea.orgId, newArea.locationId
-  );
+  }).returning();
 
   return c.json(newArea);
 });
@@ -63,29 +54,27 @@ app.put('/:id', async (c) => {
   const body = await c.req.json();
   const { name, color } = body;
 
-  const result = db.query("UPDATE areas SET name = ?, color = ? WHERE id = ? AND org_id = ?").run(name, color, id, user.orgId);
+  const [updated] = await db.update(areas)
+    .set({ name, color })
+    .where(and(eq(areas.id, id), eq(areas.orgId, user.orgId)))
+    .returning();
 
-  if (result.changes === 0) {
+  if (!updated) {
     return c.json({ error: 'Area not found' }, 404);
   }
 
-  const updated = db.query("SELECT * FROM areas WHERE id = ?").get(id) as any;
-  return c.json({
-    id: updated.id,
-    name: updated.name,
-    color: updated.color,
-    orgId: updated.org_id,
-    locationId: updated.location_id
-  });
+  return c.json(updated);
 });
 
 app.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   
-  const result = db.query("DELETE FROM areas WHERE id = ? AND org_id = ?").run(id, user.orgId);
+  const [deleted] = await db.delete(areas)
+    .where(and(eq(areas.id, id), eq(areas.orgId, user.orgId)))
+    .returning();
   
-  if (result.changes === 0) {
+  if (!deleted) {
     return c.json({ error: 'Area not found' }, 404);
   }
 

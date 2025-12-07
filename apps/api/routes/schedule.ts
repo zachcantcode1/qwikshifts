@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import db from '../db';
+import { shifts, assignments, employees } from '../schema';
+import { eq, and, gte, lte, inArray } from 'drizzle-orm';
 import type { ShiftWithAssignment, User } from '@qwikshifts/core';
 
 type Env = {
@@ -10,95 +12,65 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/week', (c) => {
+app.get('/week', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
   const locationId = c.req.query('locationId');
 
-  let query = "SELECT * FROM shifts WHERE org_id = ?";
-  const params: any[] = [user.orgId];
-
+  const filters = [eq(shifts.orgId, user.orgId)];
   if (locationId) {
-    query += " AND location_id = ?";
-    params.push(locationId);
+    filters.push(eq(shifts.locationId, locationId));
   }
-
   if (from && to) {
-    query += " AND date >= ? AND date <= ?";
-    params.push(from, to);
+    filters.push(gte(shifts.date, from), lte(shifts.date, to));
   }
 
-  const shifts = db.query(query).all(...params) as any[];
-
-  const shiftsWithAssignments: ShiftWithAssignment[] = shifts.map((shift) => {
-    const assignment = db.query("SELECT * FROM assignments WHERE shift_id = ?").get(shift.id) as any;
-
-    return {
-      id: shift.id,
-      areaId: shift.area_id,
-      date: shift.date,
-      startTime: shift.start_time,
-      endTime: shift.end_time,
-      orgId: shift.org_id,
-      locationId: shift.location_id,
-      assignment: assignment ? {
-        id: assignment.id,
-        shiftId: assignment.shift_id,
-        employeeId: assignment.employee_id,
-        roleId: assignment.role_id,
-      } : null,
-    };
+  const result = await db.query.shifts.findMany({
+    where: and(...filters),
+    with: {
+      assignment: true,
+    },
   });
 
-  return c.json(shiftsWithAssignments);
+  // Since we are returning ShiftWithAssignment which expects camelCase assignment
+  // Drizzle's query builder returns relation results attached to the object
+  // assignment is 'one' relation, so it will be an object or null.
+  return c.json(result);
 });
 
-app.get('/my', (c) => {
+app.get('/my', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
 
   // Find all employee profiles for this user
-  const employees = db.query("SELECT * FROM employees WHERE user_id = ?").all(user.id) as any[];
+  const userEmployees = await db.query.employees.findMany({
+    where: eq(employees.userId, user.id),
+  });
 
-  if (employees.length === 0) {
+  if (userEmployees.length === 0) {
     return c.json([]);
   }
 
-  const employeeIds = employees.map(e => e.id);
-  const placeholders = employeeIds.map(() => '?').join(',');
-
-  // Find shifts assigned to these employees
-  let query = `
-    SELECT s.*, a.id as assignment_id, a.employee_id, a.role_id 
-    FROM shifts s
-    JOIN assignments a ON s.id = a.shift_id
-    WHERE a.employee_id IN (${placeholders})
-  `;
-  const params: any[] = [...employeeIds];
-
+  const employeeIds = userEmployees.map(e => e.id);
+  
+  const filters = [inArray(assignments.employeeId, employeeIds)];
   if (from && to) {
-    query += " AND s.date >= ? AND s.date <= ?";
-    params.push(from, to);
+    filters.push(gte(shifts.date, from), lte(shifts.date, to));
   }
 
-  const results = db.query(query).all(...params) as any[];
+  const result = await db.select({
+      shift: shifts,
+      assignment: assignments,
+    })
+    .from(shifts)
+    .innerJoin(assignments, eq(shifts.id, assignments.shiftId))
+    .where(and(...filters));
 
-  const shiftsWithAssignments: ShiftWithAssignment[] = results.map((row) => ({
-    id: row.id,
-    areaId: row.area_id,
-    date: row.date,
-    startTime: row.start_time,
-    endTime: row.end_time,
-    orgId: row.org_id,
-    locationId: row.location_id,
-    assignment: {
-      id: row.assignment_id,
-      shiftId: row.id,
-      employeeId: row.employee_id,
-      roleId: row.role_id,
-    },
+  const shiftsWithAssignments: ShiftWithAssignment[] = result.map((row) => ({
+    ...row.shift,
+    assignment: row.assignment,
   }));
 
   return c.json(shiftsWithAssignments);
@@ -111,24 +83,32 @@ app.post('/shift', async (c) => {
 
   const newShiftId = `shift-${Date.now()}`;
   const orgId = user.orgId;
-  const locId = locationId || null;
 
-  if (!locId) {
+  if (!locationId) {
     return c.json({ error: 'Location ID is required' }, 400);
   }
 
-  db.query(`
-    INSERT INTO shifts (id, area_id, date, start_time, end_time, org_id, location_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(newShiftId, areaId, date, startTime, endTime, orgId, locId);
+  await db.transaction(async (tx) => {
+    await tx.insert(shifts).values({
+      id: newShiftId,
+      areaId,
+      date,
+      startTime,
+      endTime,
+      orgId,
+      locationId,
+    });
 
-  if (employeeId) {
-    const newAssignmentId = `assign-${Date.now()}`;
-    db.query(`
-      INSERT INTO assignments (id, shift_id, employee_id, role_id)
-      VALUES (?, ?, ?, ?)
-    `).run(newAssignmentId, newShiftId, employeeId, roleId || null);
-  }
+    if (employeeId) {
+      const newAssignmentId = `assign-${Date.now()}`;
+      await tx.insert(assignments).values({
+        id: newAssignmentId,
+        shiftId: newShiftId,
+        employeeId,
+        roleId: roleId || null,
+      });
+    }
+  });
 
   return c.json({
     id: newShiftId,
@@ -137,7 +117,7 @@ app.post('/shift', async (c) => {
     startTime,
     endTime,
     orgId,
-    locationId: locId,
+    locationId,
   });
 });
 
@@ -147,35 +127,27 @@ app.put('/:id', async (c) => {
   const body = await c.req.json();
   const { startTime, endTime } = body;
 
-  const result = db.query(`
-    UPDATE shifts SET start_time = ?, end_time = ? 
-    WHERE id = ? AND org_id = ?
-  `).run(startTime, endTime, id, user.orgId);
+  const [updated] = await db.update(shifts)
+    .set({ startTime, endTime })
+    .where(and(eq(shifts.id, id), eq(shifts.orgId, user.orgId)))
+    .returning();
 
-  if (result.changes === 0) {
+  if (!updated) {
     return c.json({ error: 'Shift not found' }, 404);
   }
 
-  const updated = db.query("SELECT * FROM shifts WHERE id = ?").get(id) as any;
-
-  return c.json({
-    id: updated.id,
-    areaId: updated.area_id,
-    date: updated.date,
-    startTime: updated.start_time,
-    endTime: updated.end_time,
-    orgId: updated.org_id,
-    locationId: updated.location_id,
-  });
+  return c.json(updated);
 });
 
 app.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
 
-  const result = db.query("DELETE FROM shifts WHERE id = ? AND org_id = ?").run(id, user.orgId);
+  const [deleted] = await db.delete(shifts)
+    .where(and(eq(shifts.id, id), eq(shifts.orgId, user.orgId)))
+    .returning();
 
-  if (result.changes === 0) {
+  if (!deleted) {
     return c.json({ error: 'Shift not found' }, 404);
   }
 

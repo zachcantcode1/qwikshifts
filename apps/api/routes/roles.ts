@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import db from '../db';
-import type { Role, User } from '@qwikshifts/core';
+import { roles } from '../schema';
+import { eq, and } from 'drizzle-orm';
+import type { User } from '@qwikshifts/core';
 
 type Env = {
   Variables: {
@@ -10,16 +12,13 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const user = c.get('user');
-  const roles = db.query("SELECT * FROM roles WHERE org_id = ?").all(user.orgId) as any[];
+  const result = await db.query.roles.findMany({
+    where: eq(roles.orgId, user.orgId),
+  });
   
-  return c.json(roles.map(r => ({
-    id: r.id,
-    name: r.name,
-    color: r.color,
-    orgId: r.org_id
-  })));
+  return c.json(result);
 });
 
 app.post('/', async (c) => {
@@ -27,16 +26,12 @@ app.post('/', async (c) => {
   const body = await c.req.json();
   const { name, color } = body;
 
-  const newRole: Role = {
+  const [newRole] = await db.insert(roles).values({
     id: `role-${Date.now()}`,
     name,
     color: color || '#3b82f6',
     orgId: user.orgId,
-  };
-
-  db.query("INSERT INTO roles (id, name, color, org_id) VALUES (?, ?, ?, ?)").run(
-    newRole.id, newRole.name, newRole.color, newRole.orgId
-  );
+  }).returning();
 
   return c.json(newRole);
 });
@@ -47,28 +42,27 @@ app.put('/:id', async (c) => {
   const body = await c.req.json();
   const { name, color } = body;
 
-  const result = db.query("UPDATE roles SET name = ?, color = ? WHERE id = ? AND org_id = ?").run(name, color, id, user.orgId);
+  const [updated] = await db.update(roles)
+    .set({ name, color })
+    .where(and(eq(roles.id, id), eq(roles.orgId, user.orgId)))
+    .returning();
 
-  if (result.changes === 0) {
+  if (!updated) {
     return c.json({ error: 'Role not found' }, 404);
   }
 
-  const updated = db.query("SELECT * FROM roles WHERE id = ?").get(id) as any;
-  return c.json({
-    id: updated.id,
-    name: updated.name,
-    color: updated.color,
-    orgId: updated.org_id
-  });
+  return c.json(updated);
 });
 
 app.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   
-  const result = db.query("DELETE FROM roles WHERE id = ? AND org_id = ?").run(id, user.orgId);
+  const [deleted] = await db.delete(roles)
+    .where(and(eq(roles.id, id), eq(roles.orgId, user.orgId)))
+    .returning();
   
-  if (result.changes === 0) {
+  if (!deleted) {
     return c.json({ error: 'Role not found' }, 404);
   }
 

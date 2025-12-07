@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import db from '../db';
+import { employees, users, rules, roles, employeeRoles } from '../schema';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { EmployeeWithRoles, User } from '@qwikshifts/core';
 
 type Env = {
@@ -10,47 +12,52 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const user = c.get('user');
   const locationId = c.req.query('locationId');
   
-  let query = `
-    SELECT e.*, u.name as user_name, u.email as user_email, r.value as rule_value
-    FROM employees e 
-    JOIN users u ON e.user_id = u.id 
-    LEFT JOIN rules r ON e.rule_id = r.id
-    WHERE e.org_id = ?
-  `;
-  const params = [user.orgId];
-
+  const filters = [eq(employees.orgId, user.orgId)];
   if (locationId) {
-    query += " AND e.location_id = ?";
-    params.push(locationId);
+    filters.push(eq(employees.locationId, locationId));
   }
 
-  const employees = db.query(query).all(...params) as any[];
+  const result = await db.select({
+    employee: employees,
+    user: users,
+    ruleValue: rules.value,
+  })
+    .from(employees)
+    .innerJoin(users, eq(employees.userId, users.id))
+    .leftJoin(rules, eq(employees.ruleId, rules.id))
+    .where(and(...filters));
 
-  const result = employees.map(emp => {
-    const roles = db.query(`
-      SELECT r.* FROM roles r 
-      JOIN employee_roles er ON r.id = er.role_id 
-      WHERE er.employee_id = ?
-    `).all(emp.id) as any[];
+  const response = [];
 
-    return {
-      id: emp.id,
-      userId: emp.user_id,
-      orgId: emp.org_id,
-      locationId: emp.location_id,
-      weeklyHoursLimit: emp.weekly_hours_limit || emp.rule_value,
-      ruleId: emp.rule_id,
-      user: { name: emp.user_name, email: emp.user_email },
-      roles: roles.map(r => ({ id: r.id, name: r.name, color: r.color, orgId: r.org_id })),
-      roleIds: roles.map(r => r.id)
-    };
-  });
+  for (const row of result) {
+    const empRoles = await db.select({
+        id: roles.id,
+        name: roles.name,
+        color: roles.color,
+        orgId: roles.orgId,
+      })
+      .from(employeeRoles)
+      .innerJoin(roles, eq(employeeRoles.roleId, roles.id))
+      .where(eq(employeeRoles.employeeId, row.employee.id));
 
-  return c.json(result);
+    response.push({
+      id: row.employee.id,
+      userId: row.employee.userId,
+      orgId: row.employee.orgId,
+      locationId: row.employee.locationId,
+      weeklyHoursLimit: row.employee.weeklyHoursLimit || row.ruleValue,
+      ruleId: row.employee.ruleId,
+      user: { name: row.user.name, email: row.user.email },
+      roles: empRoles,
+      roleIds: empRoles.map(r => r.id)
+    });
+  }
+
+  return c.json(response);
 });
 
 app.post('/', async (c) => {
@@ -66,30 +73,42 @@ app.post('/', async (c) => {
   const newEmployeeId = `emp-${Date.now()}`;
 
   try {
-    db.transaction(() => {
-      db.query("INSERT INTO users (id, email, name, role, org_id) VALUES (?, ?, ?, ?, ?)").run(
-        newUserId, email, name, 'employee', user.orgId
-      );
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: newUserId,
+        email,
+        name,
+        role: 'employee',
+        orgId: user.orgId,
+      });
 
-      db.query("INSERT INTO employees (id, user_id, org_id, location_id, weekly_hours_limit, rule_id) VALUES (?, ?, ?, ?, ?, ?)").run(
-        newEmployeeId, newUserId, user.orgId, locationId, null, ruleId || null
-      );
+      await tx.insert(employees).values({
+        id: newEmployeeId,
+        userId: newUserId,
+        orgId: user.orgId,
+        locationId,
+        weeklyHoursLimit: null,
+        ruleId: ruleId || null,
+      });
 
       if (roleIds && roleIds.length > 0) {
-        const insertRole = db.prepare("INSERT INTO employee_roles (employee_id, role_id) VALUES (?, ?)");
-        for (const roleId of roleIds) {
-          insertRole.run(newEmployeeId, roleId);
-        }
+        await tx.insert(employeeRoles).values(
+          roleIds.map((roleId: string) => ({
+            employeeId: newEmployeeId,
+            roleId,
+          }))
+        );
       }
-    })();
+    });
   } catch (error: any) {
     console.error('Error creating employee:', error);
     return c.json({ error: 'Failed to create employee', details: error.message }, 500);
   }
 
-  const roles = roleIds && roleIds.length > 0 
-    ? db.query(`SELECT * FROM roles WHERE id IN (${roleIds.map(() => '?').join(',')})`).all(...roleIds) 
-    : [];
+  let assignedRoles: any[] = [];
+  if (roleIds && roleIds.length > 0) {
+    assignedRoles = await db.select().from(roles).where(inArray(roles.id, roleIds));
+  }
 
   return c.json({
     id: newEmployeeId,
@@ -99,7 +118,7 @@ app.post('/', async (c) => {
     roleIds: roleIds || [],
     ruleId,
     user: { name, email },
-    roles: roles.map((r: any) => ({ id: r.id, name: r.name, color: r.color, orgId: r.org_id }))
+    roles: assignedRoles.map((r: any) => ({ id: r.id, name: r.name, color: r.color, orgId: r.orgId }))
   });
 });
 
@@ -109,23 +128,34 @@ app.put('/:id', async (c) => {
   const body = await c.req.json();
   const { name, email, roleIds, ruleId } = body;
 
-  const emp = db.query("SELECT * FROM employees WHERE id = ? AND org_id = ?").get(id, user.orgId) as any;
+  const emp = await db.query.employees.findFirst({
+    where: and(eq(employees.id, id), eq(employees.orgId, user.orgId)),
+  });
+
   if (!emp) {
     return c.json({ error: 'Employee not found' }, 404);
   }
 
-  db.transaction(() => {
-    db.query("UPDATE users SET name = ?, email = ? WHERE id = ?").run(name, email, emp.user_id);
-    db.query("UPDATE employees SET rule_id = ? WHERE id = ?").run(ruleId, id);
+  await db.transaction(async (tx) => {
+    await tx.update(users)
+      .set({ name, email })
+      .where(eq(users.id, emp.userId));
+      
+    await tx.update(employees)
+      .set({ ruleId: ruleId || null })
+      .where(eq(employees.id, id));
 
-    db.query("DELETE FROM employee_roles WHERE employee_id = ?").run(id);
+    await tx.delete(employeeRoles).where(eq(employeeRoles.employeeId, id));
+    
     if (roleIds && roleIds.length > 0) {
-      const insertRole = db.prepare("INSERT INTO employee_roles (employee_id, role_id) VALUES (?, ?)");
-      for (const roleId of roleIds) {
-        insertRole.run(id, roleId);
-      }
+      await tx.insert(employeeRoles).values(
+        roleIds.map((roleId: string) => ({
+          employeeId: id,
+          roleId,
+        }))
+      );
     }
-  })();
+  });
 
   return c.json({ success: true });
 });
@@ -134,15 +164,25 @@ app.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   
-  const emp = db.query("SELECT * FROM employees WHERE id = ? AND org_id = ?").get(id, user.orgId) as any;
+  const emp = await db.query.employees.findFirst({
+    where: and(eq(employees.id, id), eq(employees.orgId, user.orgId)),
+  });
+
   if (!emp) {
     return c.json({ error: 'Employee not found' }, 404);
   }
 
-  db.transaction(() => {
-    db.query("DELETE FROM employees WHERE id = ?").run(id);
-    db.query("DELETE FROM users WHERE id = ?").run(emp.user_id);
-  })();
+  await db.transaction(async (tx) => {
+    // Due to foreign key constraints, we might need to be careful with order, 
+    // but CASCADE delete should handle employee_roles and others.
+    // However, users table is separate.
+    
+    // First delete employee (cascades to assignments, time_off, etc.)
+    await tx.delete(employees).where(eq(employees.id, id));
+    
+    // Then delete user
+    await tx.delete(users).where(eq(users.id, emp.userId));
+  });
 
   return c.json({ success: true });
 });

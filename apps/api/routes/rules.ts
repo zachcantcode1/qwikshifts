@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import db from '../db';
-import type { Rule, User } from '@qwikshifts/core';
+import { rules } from '../schema';
+import { eq, and } from 'drizzle-orm';
+import type { User } from '@qwikshifts/core';
 
 type Env = {
   Variables: {
@@ -10,17 +12,13 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   const user = c.get('user');
-  const rules = db.query("SELECT * FROM rules WHERE org_id = ?").all(user.orgId) as any[];
+  const result = await db.query.rules.findMany({
+    where: eq(rules.orgId, user.orgId),
+  });
   
-  return c.json(rules.map(r => ({
-    id: r.id,
-    name: r.name,
-    type: r.type,
-    value: r.value,
-    orgId: r.org_id
-  })));
+  return c.json(result);
 });
 
 app.post('/', async (c) => {
@@ -28,46 +26,47 @@ app.post('/', async (c) => {
   const body = await c.req.json();
   const { name, value } = body;
 
-  const newRule: Rule = {
+  const [newRule] = await db.insert(rules).values({
     id: `rule-${Date.now()}`,
     name,
     type: 'MAX_HOURS',
     value: Number(value),
     orgId: user.orgId,
-  };
-
-  db.query("INSERT INTO rules (id, name, type, value, org_id) VALUES (?, ?, ?, ?, ?)").run(
-    newRule.id, newRule.name, newRule.type, newRule.value, newRule.orgId
-  );
+  }).returning();
 
   return c.json(newRule);
 });
 
 app.put('/:id', async (c) => {
+  const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json();
   const { name, value } = body;
 
-  db.query("UPDATE rules SET name = ?, value = ? WHERE id = ?").run(name, Number(value), id);
-
-  const updatedRule = db.query("SELECT * FROM rules WHERE id = ?").get(id) as any;
+  const [updated] = await db.update(rules)
+    .set({ name, value: Number(value) })
+    .where(and(eq(rules.id, id), eq(rules.orgId, user.orgId)))
+    .returning();
   
-  if (!updatedRule) {
+  if (!updated) {
     return c.json({ error: 'Rule not found' }, 404);
   }
 
-  return c.json({
-    id: updatedRule.id,
-    name: updatedRule.name,
-    type: updatedRule.type,
-    value: updatedRule.value,
-    orgId: updatedRule.org_id
-  });
+  return c.json(updated);
 });
 
 app.delete('/:id', async (c) => {
+  const user = c.get('user');
   const id = c.req.param('id');
-  db.query("DELETE FROM rules WHERE id = ?").run(id);
+  
+  const [deleted] = await db.delete(rules)
+    .where(and(eq(rules.id, id), eq(rules.orgId, user.orgId)))
+    .returning();
+    
+  if (!deleted) {
+    return c.json({ error: 'Rule not found' }, 404);
+  }
+
   return c.json({ success: true });
 });
 

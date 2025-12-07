@@ -2,7 +2,6 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { authMiddleware } from './middleware'
 import type { User } from '@qwikshifts/core'
-import { initDb } from './db'
 import areas from './routes/areas'
 import employees from './routes/employees'
 import schedule from './routes/schedule'
@@ -14,6 +13,7 @@ import timeoff from './routes/timeoff'
 import locations from './routes/locations'
 import onboarding from './routes/onboarding'
 import dashboard from './routes/dashboard'
+import auth from './routes/auth'
 
 type Env = {
   Variables: {
@@ -23,9 +23,6 @@ type Env = {
 
 const app = new Hono<Env>()
 
-// Initialize Database
-initDb();
-
 app.use('/*', cors())
 
 app.get('/health', (c) => {
@@ -34,10 +31,11 @@ app.get('/health', (c) => {
 
 // Public Routes
 app.route('/api/onboarding', onboarding)
+app.route('/api/auth', auth)
 
 // Auth Middleware for other API routes
 app.use('/api/*', async (c, next) => {
-  if (c.req.path.startsWith('/api/onboarding')) {
+  if (c.req.path.startsWith('/api/onboarding') || c.req.path.startsWith('/api/auth')) {
     await next();
     return;
   }

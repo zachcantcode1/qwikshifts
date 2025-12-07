@@ -12,22 +12,43 @@ export type DashboardStats = {
     totalShifts: number;
     unassignedShifts: number;
   };
+  weeklyRequirements: {
+    date: string;
+    dayName: string;
+    status: 'ok' | 'warning';
+    missing: number;
+    totalRequired: number;
+  }[];
 };
 
 const API_URL = 'http://localhost:3000/api';
 
-let currentUserId = localStorage.getItem('qwikshifts-user-id') || 'user-manager';
-
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  'x-user-id': currentUserId,
-});
+const getHeaders = () => {
+  const token = localStorage.getItem('qwikshifts-token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+  };
+};
 
 export const api = {
-  setUserId: (id: string, reload = true) => {
-    currentUserId = id;
-    localStorage.setItem('qwikshifts-user-id', id);
-    if (reload) window.location.reload();
+  login: async (email: string): Promise<{ token: string; user: User }> => {
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      throw new Error('Login failed');
+    }
+    const data = await res.json();
+    localStorage.setItem('qwikshifts-token', data.token);
+    return data;
+  },
+
+  logout: () => {
+    localStorage.removeItem('qwikshifts-token');
+    window.location.reload();
   },
 
   getDashboardStats: async (): Promise<DashboardStats> => {
@@ -45,6 +66,7 @@ export const api = {
 
   getLocations: async (): Promise<Location[]> => {
     const res = await fetch(`${API_URL}/locations`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch locations');
     return res.json();
   },
 
@@ -100,6 +122,7 @@ export const api = {
   getAreas: async (locationId?: string): Promise<Area[]> => {
     const url = locationId ? `${API_URL}/areas?locationId=${locationId}` : `${API_URL}/areas`;
     const res = await fetch(url, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch areas');
     return res.json();
   },
 
@@ -132,11 +155,13 @@ export const api = {
   getEmployees: async (locationId?: string): Promise<EmployeeWithRoles[]> => {
     const url = locationId ? `${API_URL}/employees?locationId=${locationId}` : `${API_URL}/employees`;
     const res = await fetch(url, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch employees');
     return res.json();
   },
 
   getRoles: async (): Promise<Role[]> => {
     const res = await fetch(`${API_URL}/roles`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch roles');
     return res.json();
   },
 

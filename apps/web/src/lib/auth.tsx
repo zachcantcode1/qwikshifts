@@ -6,9 +6,17 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isOnboarded: boolean;
+  login: (email: string) => Promise<void>;
+  logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true, isOnboarded: false });
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  isLoading: true,
+  isOnboarded: false,
+  login: async () => {},
+  logout: () => {},
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -21,13 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { onboarded } = await api.checkOnboardingStatus();
         setIsOnboarded(onboarded);
 
-        if (onboarded) {
+        const token = localStorage.getItem('qwikshifts-token');
+        if (token) {
           try {
             const u = await api.getMe();
             setUser(u);
           } catch (e) {
-            // Not logged in, but onboarded
-            console.log('Not logged in');
+            console.log('Failed to fetch user with token', e);
+            localStorage.removeItem('qwikshifts-token');
           }
         }
       } catch (err) {
@@ -39,8 +48,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
+  const login = async (email: string) => {
+    const { user } = await api.login(email);
+    setUser(user);
+    window.location.reload(); // Simple reload to refresh app state
+  };
+
+  const logout = () => {
+    api.logout();
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, isOnboarded }}>
+    <AuthContext.Provider value={{ user, isLoading, isOnboarded, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

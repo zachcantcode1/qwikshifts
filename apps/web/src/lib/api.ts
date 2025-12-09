@@ -46,7 +46,7 @@ export const api = {
     return data;
   },
 
-  register: async (email: string, name: string): Promise<{ token: string; user: User }> => {
+  register: async (email: string, name: string): Promise<{ token?: string; user?: User; requiresVerification?: boolean; devOtp?: string }> => {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -57,8 +57,38 @@ export const api = {
       throw new Error(errorData.error || 'Registration failed');
     }
     const data = await res.json();
+    if (data.token) {
+      localStorage.setItem('qwikshifts-token', data.token);
+    }
+    return data;
+  },
+
+  verifyEmail: async (email: string, otp: string): Promise<{ token: string; user: User }> => {
+    const res = await fetch(`${API_URL}/auth/verify-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: 'Verification failed' }));
+      throw new Error(errorData.error || 'Verification failed');
+    }
+    const data = await res.json();
     localStorage.setItem('qwikshifts-token', data.token);
     return data;
+  },
+
+  resendOtp: async (email: string): Promise<{ message: string; devOtp?: string }> => {
+    const res = await fetch(`${API_URL}/auth/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ error: 'Failed to resend code' }));
+      throw new Error(errorData.error || 'Failed to resend code');
+    }
+    return res.json();
   },
 
   logout: () => {

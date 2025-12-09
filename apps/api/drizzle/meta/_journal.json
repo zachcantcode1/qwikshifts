@@ -8,6 +8,13 @@
       "when": 1765241439308,
       "tag": "0000_woozy_victor_mancha",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765250040555,
+      "tag": "0001_soft_sabra",
+      "breakpoints": true
     }
   ]
 }

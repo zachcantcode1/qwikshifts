@@ -12,6 +12,7 @@ import { Settings } from '@/pages/Settings';
 import Onboarding from '@/pages/Onboarding';
 import Login from '@/pages/Login';
 import SignUp from '@/pages/SignUp';
+import VerifyEmail from '@/pages/VerifyEmail';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import './App.css';
 
@@ -48,6 +49,7 @@ function AppContent() {
       {/* Public Routes */}
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
       <Route path="/signup" element={user ? <Navigate to="/" /> : <SignUp />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
 
       {/* Protected Routes */}
       <Route path="/" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />

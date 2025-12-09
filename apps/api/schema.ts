@@ -5,6 +5,9 @@ export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   onboardingStep: integer('onboarding_step').default(1),
+  plan: text('plan').default('free'), // 'free' | 'starter' | 'pro'
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
 });
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
@@ -18,6 +21,7 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   role: text('role').notNull(), // 'manager' | 'employee'
   orgId: text('org_id').references(() => organizations.id),
+  emailVerified: boolean('email_verified').default(false),
 });
 
 export const usersRelations = relations(users, ({ one }) => ({

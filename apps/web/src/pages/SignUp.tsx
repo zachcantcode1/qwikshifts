@@ -3,19 +3,25 @@ import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function SignUp() {
     const { register } = useAuth();
     const [email, setEmail] = useState('');
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
 
     const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await register(email, name);
+            const result = await register(email, name);
+            // If requires verification, redirect to verify-email page
+            if (result.requiresVerification) {
+                navigate(`/verify-email?email=${encodeURIComponent(email)}`);
+            }
+            // If token received (test user), auth context handles redirect
         } catch (err) {
             console.error(err);
         } finally {

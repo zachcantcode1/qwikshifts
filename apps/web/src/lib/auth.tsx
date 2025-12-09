@@ -7,7 +7,7 @@ interface AuthContextType {
   isLoading: boolean;
   isOnboarded: boolean;
   login: (email: string) => Promise<void>;
-  register: (email: string, name: string) => Promise<void>;
+  register: (email: string, name: string) => Promise<{ requiresVerification?: boolean; devOtp?: string }>;
   logout: () => void;
 }
 
@@ -16,7 +16,7 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   isOnboarded: false,
   login: async () => { },
-  register: async () => { }, // Default value remains a no-op, but type-checked
+  register: async () => ({ requiresVerification: false }),
   logout: () => { },
 });
 
@@ -57,9 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (email: string, name: string) => {
-    const { user } = await api.register(email, name);
-    setUser(user);
-    window.location.reload();
+    const result = await api.register(email, name);
+    if (result.user) {
+      setUser(result.user);
+      window.location.reload();
+    }
+    return result;
   };
 
   const logout = () => {

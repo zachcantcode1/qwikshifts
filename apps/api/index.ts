@@ -14,6 +14,7 @@ import locations from './routes/locations'
 import onboarding from './routes/onboarding'
 import dashboard from './routes/dashboard'
 import auth from './routes/auth'
+import billing from './routes/billing'
 
 type Env = {
   Variables: {
@@ -45,7 +46,12 @@ app.route('/api/auth', auth)
 
 // Auth Middleware for other API routes
 app.use('/api/*', async (c, next) => {
-  if (c.req.path.startsWith('/api/onboarding') || c.req.path.startsWith('/api/auth')) {
+  // Skip auth for public routes
+  if (
+    c.req.path.startsWith('/api/onboarding') ||
+    c.req.path.startsWith('/api/auth') ||
+    c.req.path === '/api/billing/webhook'
+  ) {
     await next();
     return;
   }
@@ -62,6 +68,7 @@ app.route('/api/roles', roles)
 app.route('/api/requirements', requirements)
 app.route('/api/timeoff', timeoff)
 app.route('/api/locations', locations)
+app.route('/api/billing', billing)
 
 app.get('/api/auth/me', (c) => {
   const user = c.get('user')

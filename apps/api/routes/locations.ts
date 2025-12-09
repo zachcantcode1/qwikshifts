@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import db from '../db';
-import { locations, employees } from '../schema';
+import { locations, employees, organizations } from '../schema';
 import { eq, and } from 'drizzle-orm';
 import type { User } from '@qwikshifts/core';
 
@@ -11,6 +11,13 @@ type Env = {
 };
 
 const app = new Hono<Env>();
+
+// Plan limits
+const PLAN_LIMITS: Record<string, number> = {
+  free: 1,
+  starter: 5,
+  pro: Infinity,
+};
 
 app.get('/', async (c) => {
   const user = c.get('user');
@@ -25,6 +32,31 @@ app.post('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.json();
   const { name } = body;
+
+  // Check plan limits
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, user.orgId),
+  });
+
+  if (!org) {
+    return c.json({ error: 'Organization not found' }, 404);
+  }
+
+  const currentLocations = await db.query.locations.findMany({
+    where: eq(locations.orgId, user.orgId),
+  });
+
+  const plan = org.plan || 'free';
+  const limit = PLAN_LIMITS[plan] || 1;
+
+  if (currentLocations.length >= limit) {
+    return c.json({
+      error: `Your ${plan} plan allows ${limit} location${limit > 1 ? 's' : ''}. Please upgrade to add more.`,
+      code: 'PLAN_LIMIT_EXCEEDED',
+      currentPlan: plan,
+      limit,
+    }, 403);
+  }
 
   const [newLocation] = await db.insert(locations).values({
     id: `loc-${Date.now()}`,
@@ -41,7 +73,7 @@ app.post('/', async (c) => {
     // If not, create one linked to this location
     if (!existingEmployee) {
       await db.insert(employees).values({
-        id: `emp-${Date.now()}`, // different ID from location
+        id: `emp-${Date.now()}`,
         userId: user.id,
         orgId: user.orgId,
         locationId: newLocation.id,

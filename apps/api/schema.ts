@@ -22,6 +22,7 @@ export const users = pgTable('users', {
   role: text('role').notNull(), // 'manager' | 'employee'
   orgId: text('org_id').references(() => organizations.id),
   emailVerified: boolean('email_verified').default(false),
+  timeFormat: text('time_format').default('12h'),
 });
 
 export const usersRelations = relations(users, ({ one }) => ({
@@ -81,6 +82,7 @@ export const employees = pgTable('employees', {
   orgId: text('org_id').notNull().references(() => organizations.id),
   locationId: text('location_id').notNull().references(() => locations.id, { onDelete: 'cascade' }),
   weeklyHoursLimit: integer('weekly_hours_limit'),
+  hourlyRate: integer('hourly_rate'),
   ruleId: text('rule_id'),
 });
 

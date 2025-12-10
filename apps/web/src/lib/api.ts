@@ -238,7 +238,7 @@ export const api = {
     return res.json();
   },
 
-  createEmployee: async (data: { name: string; email: string; roleIds: string[]; ruleId?: string; locationId?: string }): Promise<EmployeeWithRoles> => {
+  createEmployee: async (data: { name: string; email: string; roleIds: string[]; ruleId?: string; locationId?: string; hourlyRate?: number }): Promise<EmployeeWithRoles> => {
     const res = await fetch(`${API_URL}/employees`, {
       method: 'POST',
       headers: getHeaders(),
@@ -247,7 +247,7 @@ export const api = {
     return res.json();
   },
 
-  updateEmployee: async (id: string, data: { name: string; email: string; roleIds: string[]; ruleId?: string }): Promise<EmployeeWithRoles> => {
+  updateEmployee: async (id: string, data: { name: string; email: string; roleIds: string[]; ruleId?: string; hourlyRate?: number }): Promise<EmployeeWithRoles> => {
     const res = await fetch(`${API_URL}/employees/${id}`, {
       method: 'PUT',
       headers: getHeaders(),
@@ -406,6 +406,24 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ status }),
     });
+    return res.json();
+  },
+
+  getPayroll: async (startDate: string, endDate: string, locationId: string): Promise<{ data: { id: string; name: string; role: string; hourlyRate: number; totalHours: number; estimatedPay: number }[] }> => {
+    const params = new URLSearchParams({ startDate, endDate, locationId });
+    const res = await fetch(`${API_URL}/payroll?${params}`, { headers: getHeaders() });
+    return res.json();
+  },
+
+  updateMe: async (data: Partial<User>): Promise<User> => {
+    const res = await fetch(`${API_URL}/auth/me`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw new Error('Failed to update profile');
+    }
     return res.json();
   },
 };

@@ -60,6 +60,7 @@ app.post('/login', async (c) => {
       name: user.name,
       role: user.role,
       orgId: user.orgId,
+      timeFormat: user.timeFormat,
     }
   });
 });
@@ -116,7 +117,7 @@ app.post('/register', async (c) => {
     const token = await sign(payload, JWT_SECRET);
     return c.json({
       token,
-      user: { id: userId, email, name, role: 'manager', orgId },
+      user: { id: userId, email, name, role: 'manager', orgId, timeFormat: '12h' },
     });
   }
 
@@ -191,6 +192,7 @@ app.post('/verify-email', async (c) => {
       name: user.name,
       role: user.role,
       orgId: user.orgId,
+      timeFormat: user.timeFormat,
     }
   });
 });
@@ -231,6 +233,29 @@ app.post('/resend-otp', async (c) => {
 app.get('/me', authMiddleware, (c) => {
   const user = c.get('user');
   return c.json(user);
+});
+
+app.put('/me', authMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json();
+
+  // Update allowed fields
+  const updateData: any = {};
+  if (body.timeFormat) updateData.timeFormat = body.timeFormat;
+  if (body.name) updateData.name = body.name; // Allow name updates too while we're here
+
+  if (Object.keys(updateData).length === 0) {
+    return c.json(user);
+  }
+
+  await db.update(users).set(updateData).where(eq(users.id, user.id)).execute();
+
+  // Return updated user
+  const updatedUser = await db.query.users.findFirst({
+    where: eq(users.id, user.id)
+  });
+
+  return c.json(updatedUser);
 });
 
 export default app;

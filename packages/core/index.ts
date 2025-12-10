@@ -6,6 +6,7 @@ export const UserSchema = z.object({
   name: z.string(),
   role: z.enum(['manager', 'employee']),
   orgId: z.string(),
+  timeFormat: z.enum(['12h', '24h']).default('12h'),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -46,6 +47,7 @@ export const EmployeeProfileSchema = z.object({
   locationId: z.string(),
   roleIds: z.array(z.string()),
   weeklyHoursLimit: z.number().optional(),
+  hourlyRate: z.number().optional(),
   ruleId: z.string().optional(),
 });
 export type EmployeeProfile = z.infer<typeof EmployeeProfileSchema>;

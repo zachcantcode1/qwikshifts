@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import type { Rule, Role, Area, StaffingRequirement, Location } from '@qwikshifts/core';
-import { Plus, Trash2, Edit2, Save, X, Shield, MapPin, Clock, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, Shield, MapPin, Clock, ChevronDown, ChevronUp, Globe, UserCog } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,8 +16,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState<'rules' | 'roles' | 'areas' | 'locations'>('rules');
-  
+  const [activeTab, setActiveTab] = useState<'rules' | 'roles' | 'areas' | 'locations' | 'preferences'>('rules');
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -29,44 +30,50 @@ export function Settings() {
       <div className="flex gap-2 mb-8 border-b">
         <button
           onClick={() => setActiveTab('rules')}
-          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'rules' 
-              ? 'border-primary text-primary font-medium' 
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'rules'
+            ? 'border-primary text-primary font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
         >
           <Clock size={16} />
-          Rules
+          Work Limits
+        </button>
+        <button
+          onClick={() => setActiveTab('preferences')}
+          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'preferences'
+            ? 'border-primary text-primary font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+        >
+          <UserCog size={16} />
+          My Preferences
         </button>
         <button
           onClick={() => setActiveTab('roles')}
-          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'roles' 
-              ? 'border-primary text-primary font-medium' 
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'roles'
+            ? 'border-primary text-primary font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
         >
           <Shield size={16} />
-          Roles
+          Job Titles
         </button>
         <button
           onClick={() => setActiveTab('areas')}
-          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'areas' 
-              ? 'border-primary text-primary font-medium' 
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'areas'
+            ? 'border-primary text-primary font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
         >
           <MapPin size={16} />
-          Areas
+          Work Zones
         </button>
         <button
           onClick={() => setActiveTab('locations')}
-          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'locations' 
-              ? 'border-primary text-primary font-medium' 
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
+          className={`px-4 py-2 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'locations'
+            ? 'border-primary text-primary font-medium'
+            : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
         >
           <Globe size={16} />
           Locations
@@ -77,6 +84,7 @@ export function Settings() {
       {activeTab === 'roles' && <RolesTab />}
       {activeTab === 'areas' && <AreasTab />}
       {activeTab === 'locations' && <LocationsTab />}
+      {activeTab === 'preferences' && <PreferencesTab />}
     </div>
   );
 }
@@ -122,7 +130,7 @@ function RulesTab() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus size={20} />
-          Add Rule
+          Add Limit
         </button>
       </div>
 
@@ -130,12 +138,13 @@ function RulesTab() {
         <div className="mb-8 p-4 border rounded-lg bg-card">
           <form onSubmit={handleCreate} className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Rule Name</label>
+              <label className="block text-sm font-medium mb-1">Limit Name</label>
               <input
                 type="text"
                 value={newRule.name}
                 onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
                 className="w-full p-2 rounded-md border bg-background"
+                placeholder="e.g. Part Time"
                 required
               />
             </div>
@@ -191,9 +200,9 @@ function RulesTab() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Rule?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Limit?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete this rule? This action cannot be undone.
+                          Are you sure you want to delete this work limit? This action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -253,7 +262,7 @@ function RolesTab() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus size={20} />
-          Add Role
+          Add Job Title
         </button>
       </div>
 
@@ -261,12 +270,13 @@ function RolesTab() {
         <div className="mb-8 p-4 border rounded-lg bg-card">
           <form onSubmit={handleCreate} className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Role Name</label>
+              <label className="block text-sm font-medium mb-1">Job Title</label>
               <input
                 type="text"
                 value={newRole.name}
                 onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
                 className="w-full p-2 rounded-md border bg-background"
+                placeholder="e.g. Server"
                 required
               />
             </div>
@@ -320,9 +330,9 @@ function RolesTab() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Role?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Job Title?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete this role? This action cannot be undone.
+                          Are you sure you want to delete this job title? This action cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -410,7 +420,7 @@ function AreasTab() {
           className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus size={20} />
-          Add Area
+          Add Zone
         </button>
       </div>
 
@@ -418,12 +428,13 @@ function AreasTab() {
         <div className="mb-8 p-4 border rounded-lg bg-card">
           <form onSubmit={handleCreate} className="flex gap-4 items-end">
             <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Area Name</label>
+              <label className="block text-sm font-medium mb-1">Zone Name</label>
               <input
                 type="text"
                 value={newArea.name}
                 onChange={(e) => setNewArea({ ...newArea, name: e.target.value })}
                 className="w-full p-2 rounded-md border bg-background"
+                placeholder="e.g. Patio"
                 required
               />
             </div>
@@ -471,8 +482,8 @@ function AreasTab() {
                     <h3 className="font-semibold">{area.name}</h3>
                   </div>
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => setExpandedId(expandedId === area.id ? null : area.id)} 
+                    <button
+                      onClick={() => setExpandedId(expandedId === area.id ? null : area.id)}
                       className={`p-2 rounded flex items-center gap-2 text-sm ${expandedId === area.id ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent'}`}
                     >
                       {expandedId === area.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -485,9 +496,9 @@ function AreasTab() {
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Area?</AlertDialogTitle>
+                          <AlertDialogTitle>Delete Zone?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Are you sure you want to delete this area? This action cannot be undone.
+                            Are you sure you want to delete this zone? This action cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -530,7 +541,7 @@ function RequirementsManager({ areaId }: { areaId: string }) {
     setRequirements(reqs);
     setRoles(rolesData);
     if (rolesData.length > 0 && !newReq.roleId) {
-        setNewReq(prev => ({ ...prev, roleId: rolesData[0].id }));
+      setNewReq(prev => ({ ...prev, roleId: rolesData[0].id }));
     }
   };
 
@@ -557,17 +568,16 @@ function RequirementsManager({ areaId }: { areaId: string }) {
   return (
     <div className="p-4 bg-accent/20 rounded-lg border">
       <h4 className="font-semibold mb-4">Staffing Requirements</h4>
-      
+
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
         {days.map(day => (
           <button
             key={day}
             onClick={() => setSelectedDay(day)}
-            className={`px-3 py-1 rounded-full text-sm capitalize whitespace-nowrap ${
-              selectedDay === day 
-                ? 'bg-primary text-primary-foreground' 
-                : 'bg-background hover:bg-accent'
-            }`}
+            className={`px-3 py-1 rounded-full text-sm capitalize whitespace-nowrap ${selectedDay === day
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-background hover:bg-accent'
+              }`}
           >
             {day}
           </button>
@@ -734,6 +744,69 @@ function LocationsTab() {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function PreferencesTab() {
+  const { user, updateUser } = useAuth();
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('24h');
+
+  useEffect(() => {
+    if (user?.timeFormat) {
+      setTimeFormat(user.timeFormat);
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    await updateUser({ timeFormat });
+  };
+
+  return (
+    <div className="max-w-xl">
+      <div className="p-6 border rounded-lg bg-card mb-6">
+        <h3 className="text-lg font-semibold mb-4">Time Display</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Time Format</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="timeFormat"
+                  value="12h"
+                  checked={timeFormat === '12h'}
+                  onChange={(e) => setTimeFormat(e.target.value as '12h')}
+                  className="w-4 h-4 text-primary"
+                />
+                <span>12-hour (e.g. 2:00 PM)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="timeFormat"
+                  value="24h"
+                  checked={timeFormat === '24h'}
+                  onChange={(e) => setTimeFormat(e.target.value as '24h')}
+                  className="w-4 h-4 text-primary"
+                />
+                <span>24-hour (e.g. 14:00)</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t flex justify-end">
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md flex items-center gap-2"
+            >
+              <Save size={16} />
+              Save Preferences
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

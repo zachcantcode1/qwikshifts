@@ -16,6 +16,7 @@ RUN bun install
 COPY . .
 
 # Build the project
+ARG VITE_SELF_HOSTED=true
 RUN bun run --filter web --filter api build
 
 # Production image
@@ -24,6 +25,9 @@ WORKDIR /app
 
 # Copy built artifacts and node_modules from base
 COPY --from=base /app .
+
+# Enable migrations for self-hosted start
+ENV RUN_MIGRATIONS=true
 
 # Expose ports (3000 for API, 4173 for Web Preview)
 EXPOSE 3000

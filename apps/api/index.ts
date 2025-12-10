@@ -15,6 +15,7 @@ import onboarding from './routes/onboarding'
 import dashboard from './routes/dashboard'
 import auth from './routes/auth'
 import billing from './routes/billing'
+import payroll from './routes/payroll'
 
 type Env = {
   Variables: {
@@ -69,6 +70,7 @@ app.route('/api/requirements', requirements)
 app.route('/api/timeoff', timeoff)
 app.route('/api/locations', locations)
 app.route('/api/billing', billing)
+app.route('/api/payroll', payroll)
 
 app.get('/api/auth/me', (c) => {
   const user = c.get('user')

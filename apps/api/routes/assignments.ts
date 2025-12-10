@@ -55,7 +55,11 @@ app.post('/assign', validator('json', (value, c) => {
       .set({ employeeId, roleId: roleId || null })
       .where(eq(assignments.id, existing.id))
       .returning();
-    
+
+    if (!updated) {
+      return c.json({ error: 'Failed to update assignment' }, 500);
+    }
+
     assignment = {
       id: updated.id,
       shiftId: updated.shiftId,
@@ -73,7 +77,11 @@ app.post('/assign', validator('json', (value, c) => {
         roleId: roleId || null,
       })
       .returning();
-      
+
+    if (!created) {
+      return c.json({ error: 'Failed to create assignment' }, 500);
+    }
+
     assignment = {
       id: created.id,
       shiftId: created.shiftId,
@@ -98,7 +106,7 @@ app.post('/unassign', validator('json', (value, c) => {
   const shift = await db.query.shifts.findFirst({
     where: and(eq(shifts.id, shiftId), eq(shifts.orgId, user.orgId)),
   });
-  
+
   if (!shift) {
     return c.json({ error: 'Shift not found' }, 404);
   }

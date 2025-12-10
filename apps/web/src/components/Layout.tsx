@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Calendar, User, Users, Settings, Clock, Inbox, Sun, Moon, LayoutGrid } from 'lucide-react';
+import { Calendar, User, Users, Settings, Clock, Inbox, Sun, Moon, LayoutGrid, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import { useTheme } from './ThemeProvider';
@@ -12,6 +12,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutGrid, roles: ['manager'] },
     { href: '/schedule', label: 'Schedule', icon: Calendar, roles: ['manager'] },
+    { href: '/payroll', label: 'Payroll', icon: DollarSign, roles: ['manager'] },
     { href: '/my-schedule', label: 'My Schedule', icon: User, roles: ['manager', 'employee'] },
     { href: '/time-off', label: 'Time Off', icon: Clock, roles: ['manager', 'employee'] },
     { href: '/time-off-requests', label: 'Requests', icon: Inbox, roles: ['manager'] },
@@ -85,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto bg-secondary/20">
-        <div className="h-full w-full max-w-7xl mx-auto p-6">
+        <div className="h-full w-full p-6">
           {children}
         </div>
       </main>

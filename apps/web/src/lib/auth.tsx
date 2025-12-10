@@ -8,6 +8,7 @@ interface AuthContextType {
   isOnboarded: boolean;
   login: (email: string) => Promise<void>;
   register: (email: string, name: string) => Promise<{ requiresVerification?: boolean; devOtp?: string }>;
+  updateUser: (data: Partial<User>) => Promise<void>;
   logout: () => void;
 }
 
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   isOnboarded: false,
   login: async () => { },
   register: async () => ({ requiresVerification: false }),
+  updateUser: async () => { },
   logout: () => { },
 });
 
@@ -65,13 +67,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
+  const updateUser = async (data: Partial<User>) => {
+    const updatedUser = await api.updateMe(data);
+    setUser(updatedUser);
+  };
+
   const logout = () => {
     api.logout();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isOnboarded, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, isOnboarded, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -11,7 +11,7 @@ export function Employees() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', email: '', roleIds: [] as string[], ruleId: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', roleIds: [] as string[], ruleId: '', hourlyRate: '' });
 
   useEffect(() => {
     api.getLocations().then((locs) => {
@@ -43,18 +43,23 @@ export function Employees() {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
 
+    const payload = {
+      ...formData,
+      hourlyRate: formData.hourlyRate ? parseFloat(formData.hourlyRate) : undefined
+    };
+
     if (editingId) {
-      await api.updateEmployee(editingId, formData);
+      await api.updateEmployee(editingId, payload);
     } else {
-      await api.createEmployee({ ...formData, locationId: selectedLocationId });
+      await api.createEmployee({ ...payload, locationId: selectedLocationId });
     }
-    
+
     resetForm();
     loadData();
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', roleIds: [], ruleId: '' });
+    setFormData({ name: '', email: '', roleIds: [], ruleId: '', hourlyRate: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -66,6 +71,7 @@ export function Employees() {
       email: employee.user.email,
       roleIds: employee.roleIds,
       ruleId: employee.ruleId || '',
+      hourlyRate: employee.hourlyRate ? employee.hourlyRate.toString() : '',
     });
     setIsFormOpen(true);
   };
@@ -135,7 +141,7 @@ export function Employees() {
                 />
               </div>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-2">Roles</label>
               <div className="flex flex-wrap gap-2">
@@ -144,11 +150,10 @@ export function Employees() {
                     key={role.id}
                     type="button"
                     onClick={() => toggleRole(role.id)}
-                    className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                      formData.roleIds.includes(role.id)
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background hover:bg-accent'
-                    }`}
+                    className={`px-3 py-1 rounded-full text-sm border transition-colors ${formData.roleIds.includes(role.id)
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background hover:bg-accent'
+                      }`}
                   >
                     {role.name}
                   </button>
@@ -156,20 +161,36 @@ export function Employees() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">Schedule Rule</label>
-              <select
-                value={formData.ruleId}
-                onChange={(e) => setFormData({ ...formData, ruleId: e.target.value })}
-                className="w-full p-2 rounded-md border bg-background"
-              >
-                <option value="">No Rule (Default)</option>
-                {rules.map(rule => (
-                  <option key={rule.id} value={rule.id}>
-                    {rule.name} ({rule.value} hrs)
-                  </option>
-                ))}
-              </select>
+
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Schedule Rule</label>
+                <select
+                  value={formData.ruleId}
+                  onChange={(e) => setFormData({ ...formData, ruleId: e.target.value })}
+                  className="w-full p-2 rounded-md border bg-background"
+                >
+                  <option value="">No Rule (Default)</option>
+                  {rules.map(rule => (
+                    <option key={rule.id} value={rule.id}>
+                      {rule.name} ({rule.value} hrs)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Hourly Rate ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={formData.hourlyRate}
+                  onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
+                  className="w-full p-2 rounded-md border bg-background"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -188,8 +209,9 @@ export function Employees() {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        </div >
+      )
+      }
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {employees.map(employee => (
@@ -214,7 +236,7 @@ export function Employees() {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex flex-wrap gap-2">
               {employee.roles.map(role => (
                 <span
@@ -235,6 +257,6 @@ export function Employees() {
           </div>
         ))}
       </div>
-    </div>
+    </div >
   );
 }

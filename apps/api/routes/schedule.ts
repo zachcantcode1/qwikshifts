@@ -54,23 +54,26 @@ app.get('/my', async (c) => {
   }
 
   const employeeIds = userEmployees.map(e => e.id);
-  
+
   const filters = [inArray(assignments.employeeId, employeeIds)];
   if (from && to) {
     filters.push(gte(shifts.date, from), lte(shifts.date, to));
   }
 
   const result = await db.select({
-      shift: shifts,
-      assignment: assignments,
-    })
+    shift: shifts,
+    assignment: assignments,
+  })
     .from(shifts)
     .innerJoin(assignments, eq(shifts.id, assignments.shiftId))
     .where(and(...filters));
 
   const shiftsWithAssignments: ShiftWithAssignment[] = result.map((row) => ({
     ...row.shift,
-    assignment: row.assignment,
+    assignment: row.assignment ? {
+      ...row.assignment,
+      roleId: row.assignment.roleId || undefined,
+    } : undefined,
   }));
 
   return c.json(shiftsWithAssignments);

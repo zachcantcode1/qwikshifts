@@ -8,6 +8,7 @@ import { MySchedule } from '@/pages/MySchedule';
 import { TimeOff } from '@/pages/TimeOff';
 import { TimeOffRequests } from '@/pages/TimeOffRequests';
 import { Employees } from '@/pages/Employees';
+import { Payroll } from '@/pages/Payroll';
 import { Settings } from '@/pages/Settings';
 import Onboarding from '@/pages/Onboarding';
 import Login from '@/pages/Login';
@@ -26,12 +27,25 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     return <div className="flex items-center justify-center h-screen bg-background text-foreground">Loading...</div>;
   }
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+  const isSelfHosted = import.meta.env.VITE_SELF_HOSTED === 'true';
 
-  if (!isOnboarded) {
-    return <Onboarding />;
+  if (isSelfHosted) {
+    // In self-hosted mode, we check onboarding first to allow fresh installs to proceed
+    if (!isOnboarded) {
+      return <Onboarding />;
+    }
+    if (!user) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+  } else {
+    // In SaaS mode, we strictly require auth first
+    if (!user) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (!isOnboarded) {
+      return <Onboarding />;
+    }
   }
 
   return children;
@@ -58,6 +72,7 @@ function AppContent() {
       <Route path="/time-off" element={<RequireAuth><Layout><TimeOff /></Layout></RequireAuth>} />
       <Route path="/time-off-requests" element={<RequireAuth><Layout><TimeOffRequests /></Layout></RequireAuth>} />
       <Route path="/employees" element={<RequireAuth><Layout><Employees /></Layout></RequireAuth>} />
+      <Route path="/payroll" element={<RequireAuth><Layout><Payroll /></Layout></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><Layout><Settings /></Layout></RequireAuth>} />
     </Routes>
   );

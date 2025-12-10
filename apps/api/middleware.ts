@@ -42,6 +42,7 @@ export const authMiddleware = createMiddleware<Env>(async (c, next) => {
       name: dbUser.name,
       role: dbUser.role as 'manager' | 'employee',
       orgId: dbUser.orgId || '',
+      timeFormat: (dbUser.timeFormat as '12h' | '24h') || '12h',
     };
 
     c.set('user', user);

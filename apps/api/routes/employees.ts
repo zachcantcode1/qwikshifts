@@ -15,7 +15,7 @@ const app = new Hono<Env>();
 app.get('/', async (c) => {
   const user = c.get('user');
   const locationId = c.req.query('locationId');
-  
+
   const filters = [eq(employees.orgId, user.orgId)];
   if (locationId) {
     filters.push(eq(employees.locationId, locationId));
@@ -35,11 +35,11 @@ app.get('/', async (c) => {
 
   for (const row of result) {
     const empRoles = await db.select({
-        id: roles.id,
-        name: roles.name,
-        color: roles.color,
-        orgId: roles.orgId,
-      })
+      id: roles.id,
+      name: roles.name,
+      color: roles.color,
+      orgId: roles.orgId,
+    })
       .from(employeeRoles)
       .innerJoin(roles, eq(employeeRoles.roleId, roles.id))
       .where(eq(employeeRoles.employeeId, row.employee.id));
@@ -50,6 +50,7 @@ app.get('/', async (c) => {
       orgId: row.employee.orgId,
       locationId: row.employee.locationId,
       weeklyHoursLimit: row.employee.weeklyHoursLimit || row.ruleValue,
+      hourlyRate: row.employee.hourlyRate,
       ruleId: row.employee.ruleId,
       user: { name: row.user.name, email: row.user.email },
       roles: empRoles,
@@ -63,7 +64,7 @@ app.get('/', async (c) => {
 app.post('/', async (c) => {
   const user = c.get('user');
   const body = await c.req.json();
-  const { name, email, roleIds, ruleId, locationId } = body;
+  const { name, email, roleIds, ruleId, locationId, hourlyRate } = body;
 
   if (!locationId) {
     return c.json({ error: 'Location ID is required' }, 400);
@@ -88,6 +89,7 @@ app.post('/', async (c) => {
         orgId: user.orgId,
         locationId,
         weeklyHoursLimit: null,
+        hourlyRate: hourlyRate || null,
         ruleId: ruleId || null,
       });
 
@@ -117,6 +119,7 @@ app.post('/', async (c) => {
     locationId,
     roleIds: roleIds || [],
     ruleId,
+    hourlyRate: hourlyRate || null,
     user: { name, email },
     roles: assignedRoles.map((r: any) => ({ id: r.id, name: r.name, color: r.color, orgId: r.orgId }))
   });
@@ -126,7 +129,7 @@ app.put('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
   const body = await c.req.json();
-  const { name, email, roleIds, ruleId } = body;
+  const { name, email, roleIds, ruleId, hourlyRate } = body;
 
   const emp = await db.query.employees.findFirst({
     where: and(eq(employees.id, id), eq(employees.orgId, user.orgId)),
@@ -140,13 +143,16 @@ app.put('/:id', async (c) => {
     await tx.update(users)
       .set({ name, email })
       .where(eq(users.id, emp.userId));
-      
+
     await tx.update(employees)
-      .set({ ruleId: ruleId || null })
+      .set({
+        ruleId: ruleId || null,
+        hourlyRate: hourlyRate || null
+      })
       .where(eq(employees.id, id));
 
     await tx.delete(employeeRoles).where(eq(employeeRoles.employeeId, id));
-    
+
     if (roleIds && roleIds.length > 0) {
       await tx.insert(employeeRoles).values(
         roleIds.map((roleId: string) => ({
@@ -163,7 +169,7 @@ app.put('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  
+
   const emp = await db.query.employees.findFirst({
     where: and(eq(employees.id, id), eq(employees.orgId, user.orgId)),
   });
@@ -176,10 +182,10 @@ app.delete('/:id', async (c) => {
     // Due to foreign key constraints, we might need to be careful with order, 
     // but CASCADE delete should handle employee_roles and others.
     // However, users table is separate.
-    
+
     // First delete employee (cascades to assignments, time_off, etc.)
     await tx.delete(employees).where(eq(employees.id, id));
-    
+
     // Then delete user
     await tx.delete(users).where(eq(users.id, emp.userId));
   });

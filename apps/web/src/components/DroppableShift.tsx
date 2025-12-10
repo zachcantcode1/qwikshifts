@@ -1,9 +1,11 @@
 import { useDroppable } from '@dnd-kit/core';
 import type { ShiftWithAssignment, EmployeeWithRoles } from '@qwikshifts/core';
 import { User } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
+import { useAuth } from '@/lib/auth';
 
 export function DroppableShift({ shift, assignedEmployee, onClick, className }: { shift: ShiftWithAssignment, assignedEmployee?: EmployeeWithRoles, onClick?: () => void, className?: string }) {
+  const { user } = useAuth();
   const { setNodeRef, isOver } = useDroppable({
     id: `shift-${shift.id}`,
     data: { type: 'shift', shift },
@@ -20,7 +22,7 @@ export function DroppableShift({ shift, assignedEmployee, onClick, className }: 
       )}
     >
       <div className="font-medium">
-        {shift.startTime} - {shift.endTime}
+        {formatTime(shift.startTime, user?.timeFormat)} - {formatTime(shift.endTime, user?.timeFormat)}
       </div>
       {assignedEmployee ? (
         <div className="mt-1 flex flex-col gap-1">

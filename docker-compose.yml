@@ -23,6 +23,7 @@ services:
     environment:
       DATABASE_URL: postgres://postgres:postgrespassword@db:5432/qwikshifts
       JWT_SECRET: super-secret-key-change-me
+      RUN_MIGRATIONS: "true"
     command: bun run --filter api start
 
   web:

@@ -9,11 +9,17 @@ const app = new Hono();
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-me';
 
 app.get('/status', async (c) => {
-  const org = await db.query.organizations.findFirst();
-  if (!org) {
+  try {
+    const org = await db.query.organizations.findFirst();
+    if (!org) {
+      return c.json({ onboarded: false, step: 1 });
+    }
+    return c.json({ onboarded: (org.onboardingStep || 1) > 5, step: org.onboardingStep || 1 });
+  } catch (error) {
+    // If DB is not ready, assume fresh install
+    console.error('Status check failed (DB might be empty):', error);
     return c.json({ onboarded: false, step: 1 });
   }
-  return c.json({ onboarded: (org.onboardingStep || 1) > 5, step: org.onboardingStep || 1 });
 });
 
 app.post('/progress', async (c) => {
@@ -31,12 +37,18 @@ app.post('/setup', async (c) => {
   const { orgName, managerName, managerEmail } = await c.req.json();
 
   // Check if user already exists
-  const existingUser = await db.query.users.findFirst({
-    where: eq(users.email, managerEmail),
-  });
+  try {
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.email, managerEmail),
+    });
 
-  if (existingUser) {
-    return c.json({ error: 'A user with this email already exists.' }, 400);
+    if (existingUser) {
+      return c.json({ error: 'A user with this email already exists.' }, 400);
+    }
+  } catch (error: any) {
+    console.error('Database check failed:', error);
+    // If table doesn't exist or DB is down
+    return c.json({ error: 'Service unavailable. Please try again later.', details: error.message }, 503);
   }
 
   const orgId = `org-${Date.now()}`;

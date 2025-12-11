@@ -1,0 +1,15 @@
+node_modules
+.git
+.DS_Store
+.env
+.env.*
+!.env.example
+dist
+build
+apps/web/dist
+apps/web/build
+apps/api/dist
+packages/core/dist
+.vscode
+.idea
+*.log

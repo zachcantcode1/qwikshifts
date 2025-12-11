@@ -15,6 +15,13 @@
       "when": 1765250040555,
       "tag": "0001_soft_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765410207426,
+      "tag": "0002_glamorous_mimic",
+      "breakpoints": true
     }
   ]
 }
